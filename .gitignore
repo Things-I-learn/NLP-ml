@@ -1,3 +1,4 @@
 docs-raw-texts/
 queries-raw-texts/
 relevance-judgments.tsv
+*.naf
