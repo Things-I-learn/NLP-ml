@@ -1,0 +1,491 @@
+% FRAGMENTO LATEX PARA INTEGRAR EN EL DOCUMENTO PRINCIPAL DE OVERLEAF.
+% Añadir al PREÁMBULO si todavía no están cargados:
+% \usepackage{graphicx}
+% \usepackage{booktabs,tabularx,array}
+% \usepackage{amsmath}
+% \usepackage{subcaption}
+% \usepackage{placeins}
+% \usepackage{xurl}
+% \usepackage{hyperref} % Después de los demás paquetes indicados.
+% El documento principal debe admitir español y texto UTF-8.
+% Las referencias del final pueden integrarse en la bibliografía general.
+% Cifras obtenidas de los resultados guardados en los dos notebooks del proyecto.
+
+\graphicspath{{./}{imagenes/}{figuras/}{graficas_spider_esquemas/}{graficas_bird_completo_esquemas/}}
+
+\section{Descripción y análisis de los datos para Text-to-SQL}
+\label{sec:datos}
+
+Se utilizarán \textbf{Spider 1.0} y \textbf{BIRD-SQL} para estudiar la generación de consultas SQL a partir de preguntas en lenguaje natural y del esquema de una base de datos. Ambos conjuntos contienen preguntas en inglés, consultas SQL de referencia e identificadores de las bases sobre las que deben ejecutarse. BIRD incorpora, además, una anotación de conocimiento auxiliar denominada \textit{evidence}.
+
+El análisis distingue dos unidades de observación: el \textit{ejemplo}, formado por una pregunta y su SQL, y el \textit{esquema}, que describe las tablas, columnas y relaciones de una base. Una misma base puede estar asociada con numerosas preguntas. Por tanto, el número de ejemplos y el número de bases son cantidades diferentes. Las estadísticas presentadas corresponden exclusivamente a los archivos públicos cargados en los notebooks, no a la totalidad de los respectivos benchmarks, que también contemplan evaluaciones con datos de prueba no incluidos aquí.
+
+\subsection{Fuente, licencia y alcance de los conjuntos}
+
+\subsubsection{Spider 1.0}
+
+Spider fue presentado por Yu et al. como un benchmark multidominio para estudiar la generalización a consultas y esquemas diferentes de los observados durante el entrenamiento% ~\cite{datos:spiderpaper}
+. Las anotaciones se cargaron desde \href{https://huggingface.co/datasets/xlangai/spider}{\texttt{xlangai/spider}}, cuya licencia declarada es \textbf{CC BY-SA 4.0}% ~\cite{datos:spiderhf}
+. Los esquemas se obtuvieron del archivo \path{evaluation_examples/examples/tables.json} del repositorio oficial \path{taoyds/spider}, enlazándolos con los ejemplos mediante \path{db_id}% ~\cite{datos:spiderrepo}
+.
+
+La versión analizada contiene \textbf{7\,000 ejemplos de entrenamiento} y \textbf{1\,034 de validación}, para un total de \textbf{8\,034 ejemplos en 160 bases}. Cada anotación tiene seis campos originales; al añadir \path{split}, la tabla combinada inicial tiene dimensiones \(8\,034\times7\). Los ejemplos de entrenamiento pertenecen a 140 bases y los de validación a otras 20, sin intersección de identificadores entre ambas particiones. El archivo de metadatos cargado contiene 166 esquemas, pero las estadísticas estructurales se calculan únicamente sobre los 160 vinculados con los ejemplos analizados.
+
+\subsubsection{BIRD-SQL completo con esquemas}
+
+BIRD fue presentado por Li et al. como un benchmark que incorpora consultas sobre bases de datos de distintos dominios y conocimiento auxiliar para su interpretación% ~\cite{datos:birdpaper}
+. Se utilizan los archivos \path{train.json}, \path{dev.json}, \path{train_tables.json} y \path{dev_tables.json} distribuidos en el repositorio comunitario \href{https://huggingface.co/datasets/Deema/BIRD-SQL}{\texttt{Deema/BIRD-SQL}}% ~\cite{datos:birdmirror}
+. Se identifica este repositorio como fuente de descarga, mientras que la fuente oficial del benchmark es el proyecto BIRD, que declara la licencia \textbf{CC BY-SA 4.0}% ~\cite{datos:birdrepo}
+.
+
+El análisis utiliza el \textbf{entrenamiento original completo de 9\,428 ejemplos}, junto con los \textbf{1\,534 ejemplos del desarrollo público}, para un total de \textbf{10\,962 ejemplos en 80 bases}. El entrenamiento original contiene 69 bases y desarrollo contiene 11. Los registros originales de entrenamiento tienen cuatro campos y los de desarrollo seis; estos últimos incluyen también \path{question_id} y \path{difficulty}. Al unir ambas fuentes y añadir \path{source_split} y \path{split}, se obtiene una tabla inicial de \(10\,962\times8\), antes de incorporar métricas derivadas. Estos resultados corresponden a los archivos originales usados en el notebook; no se mezclan con otra revisión de las anotaciones.
+
+Para disponer de una prueba interna, se reservaron bases completas del entrenamiento original mediante una selección reproducible con semilla 42. El número de bases reservadas se calculó como \(\lceil0{,}20\times69\rceil=14\). Así, quedaron \textbf{7\,996 ejemplos de 55 bases para entrenamiento} y \textbf{1\,432 ejemplos de 14 bases para prueba interna}. Los 1\,534 ejemplos de las 11 bases de desarrollo se conservaron como validación. La reserva se hizo sobre bases, no sobre filas; por ello, el porcentaje de preguntas reservadas no tiene que coincidir con el 20\,\%. Esta prueba interna es una partición experimental propia y no equivale al test oficial oculto de BIRD.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}lXrr@{}}
+\toprule
+\textbf{Conjunto} & \textbf{Partición utilizada} & \textbf{Ejemplos} & \textbf{Bases} \\
+\midrule
+Spider & Entrenamiento & 7\,000 & 140 \\
+Spider & Validación & 1\,034 & 20 \\
+\textbf{Spider} & \textbf{Total analizado} & \textbf{8\,034} & \textbf{160} \\
+\midrule
+BIRD & Entrenamiento tras la reserva & 7\,996 & 55 \\
+BIRD & Validación: desarrollo público & 1\,534 & 11 \\
+BIRD & Prueba interna & 1\,432 & 14 \\
+\textbf{BIRD} & \textbf{Total analizado} & \textbf{10\,962} & \textbf{80} \\
+\bottomrule
+\end{tabularx}
+\caption{Dimensiones de las particiones. Las bases son identificadores distintos de esquemas, mientras que los ejemplos son pares pregunta--SQL. No se comparten bases entre particiones de un mismo conjunto.}
+\label{tab:datos-particiones}
+\end{table}
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth,height=0.40\textheight,keepaspectratio]{01_particiones_bird.png}
+\caption{Número de ejemplos en las particiones experimentales de BIRD. La separación del entrenamiento original se realizó por bases completas.}
+\label{fig:datos-particiones-bird}
+\end{figure*}
+
+\subsection{Estructura, variables y formatos}
+
+Los ejemplos se organizan en tablas de anotaciones, mientras que los esquemas se conservan como registros JSON asociados mediante \path{db_id}. Las métricas del esquema se incorporan a cada ejemplo para facilitar el análisis, pero las estadísticas estructurales se calculan sobre una tabla independiente con una fila por base. Esto evita que una base con muchas preguntas tenga más peso en el análisis de esquemas.
+
+\begin{table*}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{@{}p{0.24\textwidth}p{0.19\textwidth}X@{}}
+\toprule
+\textbf{Variable} & \textbf{Tipo y formato} & \textbf{Significado y disponibilidad} \\
+\midrule
+\path{db_id} & Cadena de texto & Identificador de la base objetivo; permite recuperar su esquema. Presente en ambos conjuntos. \\
+\path{question} & Cadena de texto & Pregunta original en inglés. Presente en ambos conjuntos. \\
+\path{query} / \path{SQL} & Cadena de texto SQL & Consulta de referencia: se denomina \path{query} en Spider y \path{SQL} en BIRD. \\
+\path{question_toks} & Secuencia de cadenas & Pregunta tokenizada en Spider. \\
+\path{query_toks} & Secuencia de cadenas & SQL tokenizado en Spider. \\
+\path{query_toks_no_value} & Secuencia de cadenas & SQL de Spider tokenizado, con valores literales sustituidos por el marcador \texttt{value}. \\
+\path{evidence} & Texto, posiblemente vacío & Información auxiliar anotada en BIRD para interpretar conceptos, códigos, columnas o cálculos de la pregunta. \\
+\path{question_id} & Identificador entero & Campo disponible en el desarrollo de BIRD. Al combinarlo con entrenamiento aparecen valores ausentes y puede representarse numéricamente como decimal en pandas. \\
+\path{difficulty} & Categoría textual & Dificultad anotada en el desarrollo de BIRD: \texttt{simple}, \texttt{moderate} o \texttt{challenging}. No está disponible en el entrenamiento cargado. \\
+\path{split} & Categoría textual añadida & Partición experimental: \texttt{train}, \texttt{validation} y, en BIRD, \texttt{test\_interno}. \\
+\path{source_split} & Categoría textual añadida & Procedencia original de BIRD: \texttt{train\_original} o \texttt{dev\_oficial}. \\
+\bottomrule
+\end{tabularx}
+\caption{Variables de las anotaciones. Los tipos describen el contenido lógico; las secuencias se almacenan como listas o arreglos según la representación utilizada al cargar los datos.}
+\label{tab:datos-variables}
+\end{table*}
+
+\begin{table*}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{@{}p{0.30\textwidth}p{0.19\textwidth}X@{}}
+\toprule
+\textbf{Variable de esquema} & \textbf{Tipo y formato} & \textbf{Significado} \\
+\midrule
+\path{table_names}, \path{table_names_original} & Listas de cadenas & Nombres normalizados y originales de las tablas. \\
+\path{column_names}, \path{column_names_original} & Listas de pares & Cada par contiene el índice de la tabla y el nombre de la columna. El índice de tabla \(-1\) identifica el comodín \texttt{*}, excluido de los conteos de columnas reales. \\
+\path{column_types} & Lista de cadenas & Tipo declarado para cada columna; su posición corresponde a la de la lista de columnas. \\
+\path{primary_keys} & Lista de índices o grupos de índices & Columnas que integran claves primarias (PK). En BIRD se consideran también las claves compuestas. \\
+\path{foreign_keys} & Lista de pares de índices & Cada par vincula una columna de origen con una columna referenciada mediante una clave foránea (FK). \\
+\bottomrule
+\end{tabularx}
+\caption{Metadatos de esquema asociados a cada base de datos. Los índices de claves remiten a la lista de columnas del esquema.}
+\label{tab:datos-variables-esquema}
+\end{table*}
+
+Se derivan las longitudes de preguntas y SQL en caracteres y en unidades separadas por espacios; BIRD incorpora también la longitud de \path{evidence}. Esta última segmentación aproxima la extensión del texto y no corresponde a los tokens de un modelo de lenguaje. Para los esquemas se calculan los números de tablas, columnas, columnas PK y relaciones FK, así como los porcentajes de tablas y columnas que participan en las claves. En BIRD, una PK compuesta aporta tantas columnas como componentes tenga, sin confundir este conteo con el número de restricciones de clave primaria.
+
+Los notebooks descargan anotaciones y metadatos. En esta fase no se han incorporado los archivos SQLite con los registros de las bases. Por tanto, el análisis caracteriza el contenido textual y la estructura de los esquemas, pero no informa sobre el número de filas almacenadas en sus tablas ni presenta resultados de ejecución de las consultas.
+
+\FloatBarrier
+\subsection{Analítica descriptiva de las anotaciones}
+
+\subsubsection{Completitud y diversidad de preguntas y consultas}
+
+En Spider no se observaron valores nulos en los campos originales ni en \path{split}. En BIRD tampoco se observaron nulos en \path{db_id}, \path{question}, \path{evidence} y \path{SQL}. Sin embargo, \textbf{793 ejemplos contienen evidencia vacía}: una cadena vacía no se detecta como un valor nulo. Además, \path{question_id} y \path{difficulty} están ausentes en las 9\,428 filas procedentes del entrenamiento original, ya que esos campos solo se incluyen en desarrollo; esta ausencia se debe a la estructura de las fuentes.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}Xrr@{}}
+\toprule
+\textbf{Medida} & \textbf{Spider} & \textbf{BIRD} \\
+\midrule
+Ejemplos analizados & 8\,034 & 10\,962 \\
+Textos distintos de pregunta & 7\,990 & 10\,949 \\
+Textos distintos de SQL & 4\,525 & 10\,842 \\
+\bottomrule
+\end{tabularx}
+\caption{Cardinalidad textual de los conjuntos completos analizados. Las comparaciones son literales y se realizan entre todas las particiones de cada conjunto.}
+\label{tab:datos-unicos}
+\end{table}
+
+Una pregunta se considera única cuando su texto es distinto de los demás, sin incorporar \path{db_id} a la comparación. Por ello, una pregunta idéntica asociada a bases diferentes se cuenta una sola vez. De forma análoga, el conteo de SQL únicos compara cadenas, no equivalencia semántica. En Spider, la diferencia entre 7\,990 preguntas únicas y 4\,525 consultas únicas muestra que distintas formulaciones pueden compartir el mismo texto SQL. También puede repetirse una consulta textual en bases diferentes. Estas repeticiones de campos no demuestran por sí solas que existan registros completos duplicados. En BIRD se obtienen 10\,958 combinaciones distintas de base, pregunta y SQL, frente a 10\,962 filas; la coincidencia de esa combinación tampoco exige que la evidencia sea idéntica.
+
+\subsubsection{Frecuencias por base y construcciones SQL}
+
+La Figura~\ref{fig:datos-dominios} muestra que la cantidad de ejemplos por base es desigual. En BIRD, las bases más frecuentes del conjunto público cargado son \path{works_cycles}, con 474 ejemplos; \path{public_review_platform}, con 381; y \path{retail_world}, con 373. Este desequilibrio debe considerarse al interpretar métricas agregadas, ya que las bases con más preguntas contribuyen más al resultado global por ejemplo.
+
+\begin{figure*}[htbp]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{01_top_bases_datos_spider.png}
+\caption{Spider.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{13_top_bases_todas_particiones_bird.png}
+\caption{BIRD: todas las particiones analizadas.}
+\end{subfigure}
+\caption{Veinte bases con mayor número de ejemplos en cada conjunto.}
+\label{fig:datos-dominios}
+\end{figure*}
+
+Las construcciones SQL se identificaron mediante expresiones regulares que detectan palabras y patrones como \texttt{JOIN}, \texttt{GROUP BY} y funciones de agregación. Una consulta puede pertenecer a varias categorías, por lo que las frecuencias no suman el total de ejemplos. La presencia de más de un \texttt{SELECT} se utiliza como aproximación de subconsulta; también puede detectar operaciones de conjuntos y no sustituye un análisis sintáctico completo.
+
+\begin{table*}[htbp]
+\centering
+\small
+\begin{tabularx}{\textwidth}{@{}Xrrrr@{}}
+\toprule
+& \multicolumn{2}{c}{\textbf{Spider}} & \multicolumn{2}{c}{\textbf{BIRD}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+\textbf{Construcción} & \textbf{Frecuencia} & \textbf{\%} & \textbf{Frecuencia} & \textbf{\%} \\
+\midrule
+\texttt{JOIN} & 3\,179 & 39,57 & 8\,352 & 76,19 \\
+Agregación & 3\,821 & 47,56 & 5\,157 & 47,04 \\
+\texttt{GROUP BY} & 2\,052 & 25,54 & 1\,129 & 10,30 \\
+\texttt{ORDER BY} & 1\,865 & 23,21 & 2\,027 & 18,49 \\
+Más de un \texttt{SELECT} & 1\,178 & 14,66 & 862 & 7,86 \\
+\bottomrule
+\end{tabularx}
+\caption{Frecuencias y porcentajes de algunas construcciones. Cada porcentaje usa como denominador todos los ejemplos del conjunto correspondiente.}
+\label{tab:datos-sql}
+\end{table*}
+
+La mayor proporción de \texttt{JOIN} en BIRD indica que la combinación explícita de tablas es más frecuente en las consultas analizadas. En cambio, Spider presenta una mayor proporción de \texttt{GROUP BY} y de consultas con más de un \texttt{SELECT}. Por tanto, las diferencias describen perfiles de consulta distintos y no permiten ordenar ambos conjuntos mediante una única medida de dificultad. La Figura~\ref{fig:datos-sql} muestra el resto de las categorías detectadas.
+
+\begin{figure*}[htbp]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{02_construcciones_sql_spider.png}
+\caption{Spider.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{03_construcciones_sql_bird.png}
+\caption{BIRD.}
+\end{subfigure}
+\caption{Frecuencias absolutas de construcciones SQL. Las categorías no son excluyentes.}
+\label{fig:datos-sql}
+\end{figure*}
+
+\subsubsection{Longitud de preguntas y SQL}
+
+\begin{table*}[htbp]
+\centering
+\small
+\begin{tabularx}{\textwidth}{@{}Xrrrr@{}}
+\toprule
+& \multicolumn{2}{c}{\textbf{Spider}} & \multicolumn{2}{c}{\textbf{BIRD}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+\textbf{Medida por separación de espacios} & \textbf{Media} & \textbf{Mediana} & \textbf{Media} & \textbf{Mediana} \\
+\midrule
+Longitud de pregunta & 12,69 & 12 & 14,12 & 13 \\
+Longitud de SQL & 15,85 & 13 & 25,75 & 24 \\
+\bottomrule
+\end{tabularx}
+\caption{Extensión de preguntas y consultas SQL. El conteo por espacios es una aproximación textual, no la tokenización de un modelo.}
+\label{tab:datos-longitudes}
+\end{table*}
+
+Los histogramas de las Figuras~\ref{fig:datos-longitudes-pregunta} y~\ref{fig:datos-longitudes-sql} muestran variabilidad en ambos conjuntos. BIRD presenta consultas más extensas en promedio: 25,75 unidades frente a 15,85 en Spider. Las longitudes máximas de SQL son 178 y 87, respectivamente, mientras que las preguntas alcanzan máximos de 59 y 39. Estas diferencias son relevantes para estimar la extensión de las salidas que debe generar el modelo, aunque la longitud no determina por sí sola la dificultad semántica.
+
+\begin{figure*}[htbp]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{03_longitud_preguntas_spider.png}
+\caption{Spider.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{04_longitud_preguntas_bird.png}
+\caption{BIRD.}
+\end{subfigure}
+\caption{Histogramas de longitud de las preguntas. Los ejes y las frecuencias corresponden a cada conjunto, cuyos tamaños son diferentes.}
+\label{fig:datos-longitudes-pregunta}
+\end{figure*}
+
+\begin{figure*}[htbp]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{04_longitud_sql_spider.png}
+\caption{Spider.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{05_longitud_sql_bird.png}
+\caption{BIRD.}
+\end{subfigure}
+\caption{Histogramas de longitud de las consultas SQL.}
+\label{fig:datos-longitudes-sql}
+\end{figure*}
+
+La correlación de Pearson entre las longitudes de pregunta y SQL es de \(r=0{,}522\) en Spider y \(r=0{,}374\) en BIRD. Los diagramas de dispersión de la Figura~\ref{fig:datos-dispersion} muestran una asociación positiva, con variación considerable entre ejemplos. Una pregunta breve puede requerir una consulta extensa; por ello, no se utiliza la longitud de la pregunta como sustituto de la complejidad de su SQL.
+
+\begin{figure*}[htbp]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{05_pregunta_vs_sql_spider.png}
+\caption{Spider: \(r=0{,}522\).}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{08_pregunta_vs_sql_bird.png}
+\caption{BIRD: \(r=0{,}374\).}
+\end{subfigure}
+\caption{Relación entre la longitud de la pregunta y la del SQL de referencia. Cada punto corresponde a un ejemplo.}
+\label{fig:datos-dispersion}
+\end{figure*}
+
+\subsubsection{Evidencia auxiliar de BIRD}
+
+El campo \path{evidence} contiene texto no vacío en \textbf{10\,169 ejemplos}, equivalentes al \textbf{92,77\,\%} del conjunto analizado. Su longitud media es de 14,57 unidades separadas por espacios y la mediana es 13, incluyendo los registros vacíos como longitud cero. La Figura~\ref{fig:datos-evidence} muestra su presencia y distribución de longitud.
+
+La evidencia puede precisar información que no resulta evidente a partir de los nombres del esquema. En un ejemplo de \path{social_media}, la pregunta solicita contar los tuits en inglés y la evidencia aclara que ese idioma corresponde a \texttt{Lang = 'en'}. En otro ejemplo, de \path{cs_semester}, indica que \texttt{diff} representa la dificultad de un curso y que los valores mayores corresponden a cursos más difíciles. En \path{book_publishing_company}, orienta a sumar \texttt{qty} por fecha antes de identificar el mayor total. Estos casos ilustran correspondencias entre lenguaje natural, códigos almacenados y operaciones SQL. Para estudiar su utilidad se podrán comparar condiciones de generación con y sin evidencia, reportando explícitamente cuál se emplea.
+
+\begin{figure*}[htbp]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{06_longitud_evidence_bird.png}
+\caption{Longitud de la evidencia.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{07_evidence_presencia_bird.png}
+\caption{Registros con y sin evidencia.}
+\end{subfigure}
+\caption{Características del conocimiento auxiliar anotado en BIRD.}
+\label{fig:datos-evidence}
+\end{figure*}
+
+\FloatBarrier
+\subsection{Análisis descriptivo de los esquemas}
+
+\subsubsection{Tamaño y tipos de columnas}
+
+La Tabla~\ref{tab:datos-esquemas} resume las propiedades de cada base. En este análisis, cada esquema se cuenta una sola vez. El número de columnas corresponde a la suma de columnas de todas sus tablas, excluyendo el comodín \texttt{*}. Si dos tablas poseen una columna denominada \texttt{id}, se cuentan ambas porque pertenecen a tablas diferentes.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}Xrr@{}}
+\toprule
+\textbf{Medida por base} & \textbf{Spider} & \textbf{BIRD} \\
+\midrule
+Bases analizadas & 160 & 80 \\
+Media de tablas & 5,11 & 7,46 \\
+Mediana de tablas & 4 & 5 \\
+Rango de tablas & 2--26 & 2--65 \\
+Media de columnas & 26,82 & 54,21 \\
+Mediana de columnas & 19 & 38,5 \\
+Rango de columnas & 6--352 & 6--455 \\
+Media de columnas PK & 4,54 & 9,02 \\
+Mediana de columnas PK & 3 & 6 \\
+Media de relaciones FK & 4,64 & 6,58 \\
+Mediana de relaciones FK & 3 & 4 \\
+Máximo de relaciones FK & 25 & 61 \\
+\bottomrule
+\end{tabularx}
+\caption{Estadísticas estructurales. Las columnas PK y las relaciones FK son medidas diferentes: una clave primaria puede incluir varias columnas y una misma tabla puede intervenir en varias relaciones FK.}
+\label{tab:datos-esquemas}
+\end{table}
+
+Los esquemas de BIRD presentan más columnas por base tanto en media como en mediana. En Spider, \path{baseball_1} es el esquema con más columnas, con 352 distribuidas en 26 tablas. En BIRD, \path{works_cycles} contiene 455 columnas y 65 tablas. Los histogramas de la Figura~\ref{fig:datos-tamano-esquemas} evidencian la presencia de esquemas extensos respecto de los valores centrales. Un mayor tamaño amplía el conjunto de tablas y columnas candidatas que debe considerar el modelo al interpretar una pregunta, sin implicar que todas se utilicen en una misma consulta.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth,height=0.32\textheight,keepaspectratio]{06_tamano_esquemas_spider.png}
+\par\medskip
+\includegraphics[width=0.95\textwidth,height=0.32\textheight,keepaspectratio]{09_tamano_esquemas_bird.png}
+\caption{Distribución del número de tablas y columnas por base: Spider arriba y BIRD abajo. Las columnas representan el total de cada esquema, no el número de registros de sus tablas.}
+\label{fig:datos-tamano-esquemas}
+\end{figure*}
+
+Spider contiene 4\,291 columnas reales en los esquemas analizados: 2\,063 de tipo \texttt{number}, 2\,000 \texttt{text}, 215 \texttt{time}, 8 \texttt{others} y 5 \texttt{boolean}. BIRD contiene 4\,337 columnas: 2\,096 \texttt{text}, 1\,633 \texttt{integer}, 377 \texttt{real}, 137 \texttt{datetime}, 88 \texttt{date} y 6 \texttt{blob}. Como muestra la Figura~\ref{fig:datos-tipos}, predominan las columnas de texto y las numéricas. Las taxonomías declaradas son diferentes; por ello, no se interpreta \texttt{number} de Spider como una categoría directamente idéntica a \texttt{integer} o \texttt{real} de BIRD sin una normalización adicional.
+
+\begin{figure*}[htbp]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{07_tipos_columnas_spider.png}
+\caption{Spider.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{10_tipos_columnas_bird.png}
+\caption{BIRD.}
+\end{subfigure}
+\caption{Tipos de columna registrados en los metadatos. Se conserva la nomenclatura original de cada conjunto.}
+\label{fig:datos-tipos}
+\end{figure*}
+
+\subsubsection{Claves y relaciones entre tablas}
+
+Las claves primarias identifican registros y las claves foráneas describen relaciones entre columnas. Estos metadatos pueden orientar la asociación entre expresiones de la pregunta y elementos del esquema, conocida como \textit{schema linking}, así como la selección de condiciones para combinar tablas mediante \texttt{JOIN}. Para cada base \(d\), sean \(T_d\) sus tablas, \(C_d\) sus columnas reales, \(T_d^{\mathrm{FK}}\) las tablas que participan en alguna FK y \(K_d\) las columnas distintas que son PK o participan en FK. Se calculan los porcentajes:
+\begin{align}
+P_T(d) &= 100\,\frac{|T_d^{\mathrm{FK}}|}{|T_d|}, \\
+P_C(d) &= 100\,\frac{|K_d|}{|C_d|}.
+\end{align}
+
+La participación en una FK incluye sus extremos de origen y destino. Una columna con varios papeles se cuenta una sola vez en \(P_C\); ser referenciada por una FK no significa que la columna sea una FK de origen. Asimismo, varias relaciones pueden conectar las mismas tablas, por lo que su número no equivale al número de pares de tablas conectadas.
+
+La mediana de relaciones FK es 3 en Spider y 4 en BIRD. El máximo es 25 en Spider, alcanzado por \path{hospital_1} y \path{cre_Drama_Workshop_Groups}, y 61 en BIRD, correspondiente a \path{works_cycles}. La mediana de \(P_C\) es 31,18\,\% en Spider y 25,03\,\% en BIRD. Estos porcentajes se calculan primero por base y después se resumen; no representan una proporción global ponderada por todas las columnas.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth,height=0.32\textheight,keepaspectratio]{10_analisis_relacional_esquemas_spider.png}
+\par\medskip
+\includegraphics[width=0.95\textwidth,height=0.32\textheight,keepaspectratio]{14_analisis_relacional_esquemas_bird.png}
+\caption{Estructura relacional de Spider (arriba) y BIRD (abajo). A la izquierda, cada punto representa una base, con color según sus relaciones FK; a la derecha, se muestra la distribución de \(P_C\).}
+\label{fig:datos-relaciones}
+\end{figure*}
+
+En BIRD hay 13 bases sin relaciones FK declaradas. La ausencia de una FK explícita no demuestra que sea imposible combinar tablas mediante SQL. Del mismo modo, un porcentaje alto de tablas participantes no garantiza que todo el esquema forme un único grupo conectado. Las Figuras~\ref{fig:datos-relaciones} y~\ref{fig:datos-claves-bird} describen la información estructural disponible, pero no constituyen una medida directa de dificultad ni de desempeño del modelo.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth,height=0.40\textheight,keepaspectratio]{15_distribucion_claves_esquemas_bird.png}
+\caption{Distribuciones de columnas PK, relaciones FK y porcentaje de tablas que participan en FK en BIRD.}
+\label{fig:datos-claves-bird}
+\end{figure*}
+
+\subsubsection{Comparación de esquemas entre particiones}
+
+En BIRD, las 55 bases de entrenamiento, 11 de validación y 14 de prueba interna tienen medianas de 37, 64 y 24 columnas, respectivamente. Las medianas de relaciones FK son 4, 8 y 3,5. El valor 3,5 resulta del promedio de los dos valores centrales al calcular una mediana; no representa una relación fraccionaria en una base. La Figura~\ref{fig:datos-esquemas-particiones} muestra que, para la separación utilizada, la base típica de validación es más extensa y declara más relaciones. Esta diferencia debe tenerse en cuenta al comparar evaluaciones entre particiones, sin atribuirle por sí sola una diferencia de dificultad.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth,height=0.40\textheight,keepaspectratio]{16_comparacion_esquemas_particiones_bird.png}
+\caption{Distribución de columnas y relaciones FK por base en las particiones de BIRD. Las cajas muestran la mediana y los cuartiles; cada partición agrupa bases diferentes.}
+\label{fig:datos-esquemas-particiones}
+\end{figure*}
+
+\FloatBarrier
+\subsection{Vocabulario de las preguntas}
+
+Las nubes de palabras de la Figura~\ref{fig:datos-nubes} permiten explorar términos recurrentes. Los gráficos de frecuencia de la Figura~\ref{fig:datos-palabras} se calcularon mediante extracción de secuencias alfabéticas, conversión a minúsculas, eliminación de una lista de palabras funcionales y exclusión de términos de dos letras o menos. Este procesamiento no incluye lematización, por lo que \textit{name} y \textit{names} se cuentan por separado. La nube utiliza el procesamiento propio de WordCloud, de modo que no se interpreta como una representación exacta de la tabla de frecuencias.
+
+En Spider destacan \textit{name} (1\,766 apariciones), \textit{names} (1\,738) y \textit{number} (1\,368); en BIRD, \textit{list} (1\,878), \textit{name} (1\,522) y \textit{number} (1\,133). Estos términos reflejan solicitudes frecuentes de enumeración, identificación y conteo. La presencia en BIRD de términos como \textit{percentage} y \textit{calculate} también motiva examinar preguntas que requieren operaciones numéricas. Las frecuencias son descriptivas y no constituyen una clasificación exhaustiva de intenciones.
+
+\begin{figure*}[htbp]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{08_nube_palabras_spider.png}
+\caption{Spider.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{11_nube_palabras_bird.png}
+\caption{BIRD.}
+\end{subfigure}
+\caption{Nubes de palabras de las preguntas en lenguaje natural.}
+\label{fig:datos-nubes}
+\end{figure*}
+
+\begin{figure*}[htbp]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{09_frecuencia_palabras_spider.png}
+\caption{Spider.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{12_frecuencia_palabras_bird.png}
+\caption{BIRD.}
+\end{subfigure}
+\caption{Veinticinco términos más frecuentes tras el procesamiento indicado.}
+\label{fig:datos-palabras}
+\end{figure*}
+
+\FloatBarrier
+\subsection{Justificación de la selección y alcance experimental}
+
+Ambos conjuntos se corresponden directamente con el problema planteado: cada ejemplo permite utilizar una pregunta y el esquema objetivo como entrada, y una consulta SQL anotada como referencia de salida. La disponibilidad de tablas, columnas, tipos y claves permite estudiar la selección de elementos del esquema y la generación de consultas que respeten su estructura.
+
+Spider aporta diversidad de formulaciones y construcciones SQL, además de una separación entre entrenamiento y validación sin bases compartidas. BIRD complementa ese escenario con esquemas más extensos en las estadísticas observadas, una mayor proporción de consultas con \texttt{JOIN} y evidencia auxiliar que permite estudiar el efecto del conocimiento contextual. Esta complementariedad justifica analizarlos conjuntamente, manteniendo separados sus resultados y protocolos de evaluación.
+
+La separación por bases permite examinar generalización a esquemas no vistos, aunque no garantiza la ausencia de toda similitud temática entre particiones. En BIRD se conservará la prueba interna para la evaluación final y se utilizará validación para ajustar decisiones. Las estadísticas globales de este apartado describen el corpus; los criterios de selección o ajuste del modelo no deberán basarse en los resultados de la prueba interna.
+
+Las gráficas y los conteos presentados constituyen una caracterización descriptiva, no una evaluación del modelo. Para una evaluación por ejecución será necesario incorporar los archivos SQLite compatibles con estas anotaciones y comparar los resultados del SQL generado con los del SQL de referencia. Se reportará también si se proporciona \path{evidence}, dado que modifica la información disponible para el sistema. La coincidencia de resultados en una base concreta permite evaluar la respuesta sobre esos datos, sin demostrar equivalencia de las consultas para cualquier contenido posible.
+
+% Integrar estas entradas en la bibliografía general si el paper ya dispone de ella.
+% Las claves llevan el prefijo datos: para evitar conflictos con otras secciones.
+% \begin{thebibliography}{9}
+% 
+% \bibitem{datos:spiderpaper}
+% T. Yu et al. (2018).
+% \textit{Spider: A Large-Scale Human-Labeled Dataset for Complex and Cross-Domain Semantic Parsing and Text-to-SQL Task}.
+% Proceedings of EMNLP, pp. 3911--3921.
+% \url{https://aclanthology.org/D18-1425/}.
+% 
+% \bibitem{datos:birdpaper}
+% J. Li et al. (2023).
+% \textit{Can LLM Already Serve as A Database Interface? A BIg Bench for Large-Scale Database Grounded Text-to-SQLs}.
+% Advances in Neural Information Processing Systems, vol. 36, Datasets and Benchmarks Track.
+% \url{https://proceedings.neurips.cc/paper_files/paper/2023/hash/83fc8fab1710363050bbd1d4b8cc0021-Abstract-Datasets_and_Benchmarks.html}.
+% 
+% \bibitem{datos:spiderhf}
+% XLang NLP Lab. \textit{Spider en Hugging Face: anotaciones y licencia CC BY-SA 4.0}.
+% \url{https://huggingface.co/datasets/xlangai/spider}.
+% Consulta: 6 de octubre de 2026.
+% 
+% \bibitem{datos:spiderrepo}
+% Repositorio oficial de Spider. \textit{Formato de anotaciones y metadatos de esquema}.
+% \url{https://github.com/taoyds/spider}.
+% Consulta: 6 de octubre de 2026.
+% 
+% \bibitem{datos:birdmirror}
+% Deema. \textit{BIRD-SQL: copia comunitaria de anotaciones y esquemas}.
+% \url{https://huggingface.co/datasets/Deema/BIRD-SQL/tree/main}.
+% Consulta: 6 de octubre de 2026.
+% 
+% \bibitem{datos:birdrepo}
+% Proyecto BIRD. \textit{Documentación de datos, licencia y evaluación}.
+% \url{https://github.com/AlibabaResearch/DAMO-ConvAI/tree/main/bird}.
+% Consulta: 6 de octubre de 2026.
+% 
+% \end{thebibliography}
